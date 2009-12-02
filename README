@@ -1,0 +1,79 @@
+
+RabbitMQ Queue Forwarder
+
+============================
+IMPORTANT: THIS IS A HACK.
+FOR EXPERIMENTAL USE ONLY.
+NOT INTENDED FOR PRODUCTION.
+============================
+
+Background:
+http://somic.org/2009/12/02/hacking-rabbitmq-remote-queue-forwarders
+
+INSTALL
+=======
+
+1. Adjust path to rabbit.hrl in rabbit_queue_forwarder.erl and compile:
+
+% erlc rabbit_queue_forwarder.erl
+
+2. Copy resulting rabbit_queue_forwarder.beam into rabbitmq ebin directory
+(in my case, /usr/lib/erlang/lib/rabbitmq_server-1.6.0/ebin)
+
+3. Launch 2 rabbitmq nodes with the same cookie on your machine. Below, I
+will use tom@myvm (listens on port 65002) and jerry@myvm (65001)
+as these 2 nodes. For example, you can create 2 directories - ./tom and
+./jerry, and place the following shell script called "startup" in each:
+
+#!/bin/sh
+
+RABBITMQ_VAR_DIR=`pwd`
+RABBITMQ_NODENAME=`basename $RABBITMQ_VAR_DIR`
+RABBITMQ_NODE_IP_ADDRESS=127.0.0.1
+RABBITMQ_NODE_PORT=65002 # or 65001 for jerry
+RABBITMQ_PIDS_FILE=$RABBITMQ_VAR_DIR/pids
+RABBITMQ_MNESIA_BASE=$RABBITMQ_VAR_DIR/mnesia
+RABBITMQ_LOGS=$RABBITMQ_VAR_DIR/$RABBITMQ_NODENAME.log
+RABBITMQ_SASL_LOGS=$RABBITMQ_VAR_DIR/$RABBITMQ_NODENAME-sasl.log
+
+export RABBITMQ_NODENAME RABBITMQ_NODE_IP_ADDRESS \
+	RABBITMQ_NODE_PORT RABBITMQ_PIDS_FILE \
+	RABBITMQ_MNESIA_BASE RABBITMQ_LOGS RABBITMQ_SASL_LOGS
+
+/usr/lib/rabbitmq/bin/rabbitmq-multi start_all 1
+
+To start nodes, do:
+% cd tom && sh startup
+% cd jerry && sh startup
+
+4. Install pika (python client lib) from http://github.com/tonyg/pika
+
+5. Run step 1 to create queues:
+
+% ./demo.py --step1
+
+6. Remsh into tom and jerry:
+
+% erl -sname one -remsh tom@myvm
+% erl -sname two -remsh jerry@myvm
+
+7. On tom, run the following:
+
+erl> spawn(fun rabbit_queue_forwarder:qpid_lookup_server/0).
+
+8. On jerry, run the following:
+
+erl> rabbit_queue_forwarder:forward_queue(<<"forw_test_1">>, tom@myvm).
+
+The output should indicate pid for forw_test_1 is now a remote pid:
+
+{ok,{atomic,[{amqqueue,{resource,<<"/">>,queue,
+                                 <<"forw_test_1">>},
+                       true,false,[],<10511.226.0>}]}}
+
+9. Run step 2. It will be publishing to jerry and consuming from tom.
+
+% ./demo.py --step2. If you see "All consumed!" in output, it worked.
+
+
+
